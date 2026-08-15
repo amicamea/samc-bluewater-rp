@@ -4,70 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>San Andreas Medical Center</title>
-
-<script>
-  // Se résout dès que Firebase (window.storage) est prêt à être utilisé.
-  window.__firebaseReadyPromise = new Promise((resolve)=>{ window.__resolveFirebaseReady = resolve; });
-</script>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getDatabase, ref, get as dbGet, set as dbSet } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBpgplv5kb_lZVSg5FVuk0d1XX1kyixaTM",
-    authDomain: "san-andreas-ems.firebaseapp.com",
-    databaseURL: "https://san-andreas-ems-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "san-andreas-ems",
-    storageBucket: "san-andreas-ems.firebasestorage.app",
-    messagingSenderId: "264957199131",
-    appId: "1:264957199131:web:d32df9aaaca54e683849be",
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  function safeKey(key){
-    return String(key).replace(/[.#$\[\]\/]/g, "_");
-  }
-
-  // Implémente la même interface que window.storage (get/set/delete/list) :
-  // les données "shared" vont dans Firebase Realtime Database (partagées entre
-  // tout le monde), les données personnelles restent dans le navigateur local.
-  window.storage = {
-    async get(key, shared){
-      if(!shared){
-        const raw = localStorage.getItem("samc_local_" + key);
-        if(raw === null){ throw new Error("not found"); }
-        return { key, value: raw, shared: false };
-      }
-      const snap = await dbGet(ref(db, "data/" + safeKey(key)));
-      if(!snap.exists()){ throw new Error("not found"); }
-      return { key, value: snap.val(), shared: true };
-    },
-    async set(key, value, shared){
-      if(!shared){
-        localStorage.setItem("samc_local_" + key, value);
-        return { key, value, shared: false };
-      }
-      await dbSet(ref(db, "data/" + safeKey(key)), value);
-      return { key, value, shared: true };
-    },
-    async delete(key, shared){
-      if(!shared){
-        localStorage.removeItem("samc_local_" + key);
-        return { key, deleted: true, shared: false };
-      }
-      await dbSet(ref(db, "data/" + safeKey(key)), null);
-      return { key, deleted: true, shared: true };
-    },
-    async list(prefix, shared){
-      return { keys: [], prefix: prefix, shared: !!shared };
-    }
-  };
-
-  window.__resolveFirebaseReady();
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
 <link href="https://fonts.cdnfonts.com/css/glacial-indifference" rel="stylesheet">
@@ -2162,7 +2098,6 @@ $("btnSaveCorrection").addEventListener("click", async ()=>{
 
 // ---------- Init ----------
 async function init(){
-  if(window.__firebaseReadyPromise){ await window.__firebaseReadyPromise; }
   await loadState();
   await checkWeeklyReset();
 }

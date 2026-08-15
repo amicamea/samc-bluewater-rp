@@ -1023,30 +1023,48 @@ function getEntry(matricule, dKey, create){
 }
 
 // ---------- Storage ----------
-async function loadState(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    if(res && res.value){
-      const parsed = JSON.parse(res.value);
-      state.employees = Array.isArray(parsed.employees) ? parsed.employees : [];
-      state.entries = parsed.entries || {};
-      state.dispatch = parsed.dispatch || {};
-      state.adminPassword = parsed.adminPassword || DEFAULT_ADMIN_PASSWORD;
-      state.patients = Array.isArray(parsed.patients) ? parsed.patients : [];
-      state.poles = DEFAULT_POLES.slice(); // liste fixe, resynchronisée à chaque chargement
-      state.tarifs = parsed.tarifs || {};
-      state.appointments = Array.isArray(parsed.appointments) ? parsed.appointments : [];
-      state.lastResetWeek = parsed.lastResetWeek || null;
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwA-g679x1WCBESMpq_yRqJYL1NqzrLR-CFr82m8T4mVdOqqucK8M-ovhyEOKUdDHK4iw/exec"; // Remplace bien par l'URL de ton script !
+
+// Fonction universelle et sécurisée pour parler à Google Sheets
+async function fetchGoogleSheets(donneesAEnvoyer) {
+  try {
+    const reponse = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+      body: JSON.stringify(donneesAEnvoyer)
+    });
+    
+    const json = await reponse.json();
+    if (!json.success) {
+      console.error("Erreur côté Google Sheets:", json.error);
     }
-  }catch(e){
-    state = { employees: [], entries: {}, dispatch: {}, adminPassword: DEFAULT_ADMIN_PASSWORD, patients: [], poles: DEFAULT_POLES.slice(), tarifs: {}, appointments: [], lastResetWeek: null };
-    await saveState();
+    return json.data;
+  } catch (error) {
+    console.error("Impossible de joindre la base de données", error);
+    return null;
   }
 }
-async function saveState(){
-  try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(state), true);
-  }catch(e){ console.error("Échec de sauvegarde", e); }
+
+// Remplacement de ton ancienne fonction loadState
+async function loadState() {
+  const data = await fetchGoogleSheets({ action: "chargerTout" });
+  if (data) {
+    state.employees = data.employees || [];
+    state.entries = data.entries || {};
+    state.dispatch = data.dispatch || {};
+    state.patients = data.patients || [];
+    state.tarifs = data.tarifs || {};
+    state.appointments = data.appointments || [];
+    // state.poles reste fixe par défaut
+  }
+}
+
+// Remplacement de ton ancienne fonction saveState
+async function saveState() {
+  await fetchGoogleSheets({ 
+    action: "sauvegarderTout", 
+    etatGlobal: state 
+  });
 }
 
 // ---------- Réinitialisation hebdomadaire des rendez-vous (lundi 00h) ----------

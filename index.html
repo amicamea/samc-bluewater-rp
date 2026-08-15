@@ -4,9 +4,75 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>San Andreas Medical Center</title>
+
+<script>
+  // Se résout dès que Firebase (window.storage) est prêt à être utilisé.
+  window.__firebaseReadyPromise = new Promise((resolve)=>{ window.__resolveFirebaseReady = resolve; });
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getDatabase, ref, get as dbGet, set as dbSet } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBpgplv5kb_lZVSg5FVuk0d1XX1kyixaTM",
+    authDomain: "san-andreas-ems.firebaseapp.com",
+    databaseURL: "https://san-andreas-ems-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "san-andreas-ems",
+    storageBucket: "san-andreas-ems.firebasestorage.app",
+    messagingSenderId: "264957199131",
+    appId: "1:264957199131:web:d32df9aaaca54e683849be",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  function safeKey(key){
+    return String(key).replace(/[.#$\[\]\/]/g, "_");
+  }
+
+  // Implémente la même interface que window.storage (get/set/delete/list) :
+  // les données "shared" vont dans Firebase Realtime Database (partagées entre
+  // tout le monde), les données personnelles restent dans le navigateur local.
+  window.storage = {
+    async get(key, shared){
+      if(!shared){
+        const raw = localStorage.getItem("samc_local_" + key);
+        if(raw === null){ throw new Error("not found"); }
+        return { key, value: raw, shared: false };
+      }
+      const snap = await dbGet(ref(db, "data/" + safeKey(key)));
+      if(!snap.exists()){ throw new Error("not found"); }
+      return { key, value: snap.val(), shared: true };
+    },
+    async set(key, value, shared){
+      if(!shared){
+        localStorage.setItem("samc_local_" + key, value);
+        return { key, value, shared: false };
+      }
+      await dbSet(ref(db, "data/" + safeKey(key)), value);
+      return { key, value, shared: true };
+    },
+    async delete(key, shared){
+      if(!shared){
+        localStorage.removeItem("samc_local_" + key);
+        return { key, deleted: true, shared: false };
+      }
+      await dbSet(ref(db, "data/" + safeKey(key)), null);
+      return { key, deleted: true, shared: true };
+    },
+    async list(prefix, shared){
+      return { keys: [], prefix: prefix, shared: !!shared };
+    }
+  };
+
+  window.__resolveFirebaseReady();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
 <link href="https://fonts.cdnfonts.com/css/glacial-indifference" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
   :root{
     --accent: #8989DB;
@@ -970,6 +1036,20 @@
 (function(){
 "use strict";
 
+// ---------- Firebase ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyBpgplv5kb_lZVSg5FVuk0d1XX1kyixaTM",
+  authDomain: "san-andreas-ems.firebaseapp.com",
+  databaseURL: "https://san-andreas-ems-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "san-andreas-ems",
+  storageBucket: "san-andreas-ems.firebasestorage.app",
+  messagingSenderId: "264957199131",
+  appId: "1:264957199131:web:d32df9aaaca54e683849be",
+  measurementId: "G-WLTYD1BNTN"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 const STORAGE_KEY = "san-andreas-ems-data";
 const DEFAULT_ADMIN_PASSWORD = "SAMC-Admin-2026";
 const DEFAULT_POLES = ["Médecine du Travail", "PPA", "Gynécologie Obstétrique", "Psychiatrie-Psychothérapeute", "Chirurgie", "Psychologue du Travail", "Pharmacie", "Communication", "Logistique", "Kinésithérapie"];
@@ -1025,9 +1105,9 @@ function getEntry(matricule, dKey, create){
 // ---------- Storage ----------
 async function loadState(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    if(res && res.value){
-      const parsed = JSON.parse(res.value);
+    const snapshot = await db.ref(STORAGE_KEY).once("value");
+    const parsed = snapshot.val();
+    if(parsed){
       state.employees = Array.isArray(parsed.employees) ? parsed.employees : [];
       state.entries = parsed.entries || {};
       state.dispatch = parsed.dispatch || {};
@@ -1039,14 +1119,15 @@ async function loadState(){
       state.lastResetWeek = parsed.lastResetWeek || null;
     }
   }catch(e){
+    console.error("Échec de chargement Firebase", e);
     state = { employees: [], entries: {}, dispatch: {}, adminPassword: DEFAULT_ADMIN_PASSWORD, patients: [], poles: DEFAULT_POLES.slice(), tarifs: {}, appointments: [], lastResetWeek: null };
     await saveState();
   }
 }
 async function saveState(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(state), true);
-  }catch(e){ console.error("Échec de sauvegarde", e); }
+    await db.ref(STORAGE_KEY).set(state);
+  }catch(e){ console.error("Échec de sauvegarde Firebase", e); }
 }
 
 // ---------- Réinitialisation hebdomadaire des rendez-vous (lundi 00h) ----------
@@ -2081,6 +2162,7 @@ $("btnSaveCorrection").addEventListener("click", async ()=>{
 
 // ---------- Init ----------
 async function init(){
+  if(window.__firebaseReadyPromise){ await window.__firebaseReadyPromise; }
   await loadState();
   await checkWeeklyReset();
 }
